@@ -172,12 +172,12 @@ def get_footprint_transform(footprint):
 
     return Transform(pcbnew.Iu2Millimeter(x),
                      pcbnew.Iu2Millimeter(y),
-                     math.radians(footprint.GetOrientationDegrees()))
+                     -math.radians(footprint.GetOrientationDegrees()))
 
 def set_footprint_transform(footprint, transform):
     footprint.SetPosition(pcbnew.wxPoint(pcbnew.Millimeter2iu(transform.x),
                                          pcbnew.Millimeter2iu(transform.y)))
-    footprint.SetOrientationDegrees(math.degrees(transform.theta))
+    footprint.SetOrientationDegrees(-math.degrees(transform.theta))
 
 class Polaris(pcbnew.ActionPlugin):
     def defaults(self):
