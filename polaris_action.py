@@ -179,11 +179,12 @@ def set_footprint_transform(footprint, transform):
                                          pcbnew.Millimeter2iu(transform.y)))
     footprint.SetOrientationDegrees(-math.degrees(transform.theta))
 
-class Polaris(pcbnew.ActionPlugin):
+class PolarisAction(pcbnew.ActionPlugin):
     def defaults(self):
         self.name = "Polaris"
         self.category = "Modify PCB"
         self.description = "Compute part placement and orientation from transformations stored in a property"
+        self.show_toolbar_button = True
 
     def Run(self):
         board = pcbnew.GetBoard()
@@ -193,5 +194,3 @@ class Polaris(pcbnew.ActionPlugin):
                 t = compute_transform(footprint.GetProperty('Polaris'))
 
                 set_footprint_transform(footprint, t);
-
-Polaris().register()
