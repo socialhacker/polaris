@@ -69,61 +69,62 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
 
-def parse_factor(tokens):
-    match tokens.pop():
-        case ('NUMBER', value): return float(value)
-        case (group,    value): raise RuntimeError(f'Unexpected token "{value}" of type {group}')
+    def parse_factor(self):
+        match self.tokens.pop():
+            case ('NUMBER', value): return float(value)
+            case (token,    value): raise RuntimeError(f'Unexpected token "{value}" of type {token}')
 
-def parse_term(tokens):
-    factor = parse_factor(tokens)
+    def parse_term(self):
+        factor = self.parse_factor()
 
-    while True:
-        match tokens.peek():
-            case ('OP', '*'): tokens.pop(); factor = factor * parse_factor(tokens)
-            case ('OP', '/'): tokens.pop(); factor = factor / parse_factor(tokens)
-            case _: return factor
+        while True:
+            match self.tokens.peek():
+                case ('OP', '*'): self.tokens.pop(); factor = factor * self.parse_factor()
+                case ('OP', '/'): self.tokens.pop(); factor = factor / self.parse_factor()
+                case _: return factor
 
-def parse_expression(tokens):
-    term = parse_term(tokens)
+    def parse_expression(self):
+        term = self.parse_term()
 
-    while True:
-        match tokens.peek():
-            case ('OP', '+'): tokens.pop(); term = term + parse_term(tokens)
-            case ('OP', '-'): tokens.pop(); term = term - parse_term(tokens)
-            case _: return term
+        while True:
+            match self.tokens.peek():
+                case ('OP', '+'): self.tokens.pop(); term = term + self.parse_term()
+                case ('OP', '-'): self.tokens.pop(); term = term - self.parse_term()
+                case _: return term
 
-def parse_reference(tokens):
-    tokens.expect('LEFT')
-    tokens.expect('RIGHT')
-    return Transform(0, 0, 0)
+    def parse_reference(self):
+        self.tokens.expect('LEFT')
+        self.tokens.expect('RIGHT')
 
-def parse_rotation(tokens, scale):
-    tokens.expect('LEFT')
-    angle = parse_expression(tokens) * scale
-    tokens.expect('RIGHT')
+        return Transform(0, 0, 0)
 
-    return Transform.from_rotation(angle)
+    def parse_rotation(self, scale):
+        self.tokens.expect('LEFT')
+        angle = self.parse_expression() * scale
+        self.tokens.expect('RIGHT')
 
-def parse_translation(tokens, scale):
-    tokens.expect('LEFT')
-    x = parse_expression(tokens) * scale
-    tokens.expect('COMMA')
-    y = parse_expression(tokens) * scale
-    tokens.expect('RIGHT')
+        return Transform.from_rotation(angle)
 
-    return Transform.from_translation(x, y)
+    def parse_translation(self, scale):
+        self.tokens.expect('LEFT')
+        x = self.parse_expression() * scale
+        self.tokens.expect('COMMA')
+        y = self.parse_expression() * scale
+        self.tokens.expect('RIGHT')
 
-def parse_transform(tokens):
-    match tokens.pop():
-        case ('ID', value):
-            match value:
-                case 'ref':  return parse_reference(tokens)
-                case 'deg':  return parse_rotation(tokens, math.pi / 180)
-                case 'grad': return parse_rotation(tokens, math.pi / 200)
-                case 'rad':  return parse_rotation(tokens, 1)
-                case 'turn': return parse_rotation(tokens, math.pi * 2)
-                case 'inch': return parse_translation(tokens, 25.4)
-                case 'mil':  return parse_translation(tokens, 0.0254)
-                case 'mm':   return parse_translation(tokens, 1)
-                case _:      raise RuntimeError(f'Unexpected transformation "{value}"')
-        case (group, value): raise RuntimeError(f'Unexpected token "{value}" of type {group}')
+        return Transform.from_translation(x, y)
+
+    def parse_transform(self):
+        match self.tokens.pop():
+            case ('ID', value):
+                match value:
+                    case 'ref':  return self.parse_reference()
+                    case 'deg':  return self.parse_rotation(math.pi / 180)
+                    case 'grad': return self.parse_rotation(math.pi / 200)
+                    case 'rad':  return self.parse_rotation(1)
+                    case 'turn': return self.parse_rotation(math.pi * 2)
+                    case 'inch': return self.parse_translation(25.4)
+                    case 'mil':  return self.parse_translation(0.0254)
+                    case 'mm':   return self.parse_translation(1)
+                    case _:      raise RuntimeError(f'Unexpected transformation "{value}"')
+            case (token, value): raise RuntimeError(f'Unexpected token "{value}" of type {token}')

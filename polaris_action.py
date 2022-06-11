@@ -12,18 +12,19 @@ import wx
 
 from .transform import Transform
 from .parser    import Tokens
+from .parser    import Parser
 from .parser    import tokenize
-from .parser    import parse_transform
 
 def ignore_whitespace(tokens):
     return filter(lambda item : item[0] != "WHITESPACE", tokens)
 
 def compute_transform(source):
     tokens    = Tokens(ignore_whitespace(tokenize(source)))
+    parser    = Parser(tokens)
     transform = Transform(0, 0, 0)
 
     while tokens:
-        transform = transform * parse_transform(tokens)
+        transform = transform * parser.parse_transform()
 
     return transform
 
@@ -48,9 +49,22 @@ class PolarisAction(pcbnew.ActionPlugin):
 
     def Run(self):
         board = pcbnew.GetBoard()
+        transforms = {}
+
+        for drawing in board.GetDrawings():
+            if isinstance (drawing, pcbnew.PCB_TEXT):
+                print(f'PCB_TEXT: {drawing.GetText()}', file=sys.stderr)
 
         for footprint in board.GetFootprints():
             if footprint.HasProperty('Polaris'):
-                t = compute_transform(footprint.GetProperty('Polaris'))
+                source    = footprint.GetProperty('Polaris')
+                transform = compute_transform(source)
+                path      = footprint.GetPath().AsString()
+                _, origin = transforms.get(path, (footprint,
+                                                  Transform(0, 0, 0)))
 
-                set_footprint_transform(footprint, t);
+                transforms[path] = (footprint, origin * transform)
+
+
+        for uuid, (footprint, transform) in transforms.items():
+            set_footprint_transform(footprint, transform)
