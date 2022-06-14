@@ -13,7 +13,7 @@ from .transform import Transform
 # TRANSLATION = ('inch'|'mil'|'mm') '(' EXPRESSION ',' EXPRESSION ')'
 # REFERENCE   = [A-Za-z]+[A-Za-z0-9_]*
 # EXPRESSION  = TERM (('+'|'-') TERM)*
-# TERM        = FACTOR (('*'|'/') FACTOR)*
+# TERM        = FACTOR (('@'|'*'|'/') FACTOR)*
 # FACTOR      = ('+'|'-')? (NUMBER | '(' EXPRESSION ')')
 # NUMBER      = DIGITS+ ("." DIGITS)? EXPONENT?
 # EXPONENT    = ('e'|'E') ('+'|'-')? DIGITS
@@ -23,7 +23,7 @@ from .transform import Transform
 def tokenize(source):
     tokens = [ ('NUMBER',     r'\d[\d_]*(\.\d[\d_]*)?([eE][+\-]?\d[\d_]*)?'),
                ('ID',         r'[A-Za-z]+\w*'),
-               ('OP',         r'[+\-*/]'),
+               ('OP',         r'[+\-*/@]'),
                ('LEFT',       r'\('),
                ('RIGHT',      r'\)'),
                ('COMMA',      r','),
@@ -69,29 +69,6 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
 
-    def parse_factor(self):
-        match self.tokens.pop():
-            case ('NUMBER', value): return float(value)
-            case (token,    value): raise RuntimeError(f'Unexpected token "{value}" of type {token}')
-
-    def parse_term(self):
-        factor = self.parse_factor()
-
-        while True:
-            match self.tokens.peek():
-                case ('OP', '*'): self.tokens.pop(); factor = factor * self.parse_factor()
-                case ('OP', '/'): self.tokens.pop(); factor = factor / self.parse_factor()
-                case _: return factor
-
-    def parse_expression(self):
-        term = self.parse_term()
-
-        while True:
-            match self.tokens.peek():
-                case ('OP', '+'): self.tokens.pop(); term = term + self.parse_term()
-                case ('OP', '-'): self.tokens.pop(); term = term - self.parse_term()
-                case _: return term
-
     def parse_reference(self):
         self.tokens.expect('LEFT')
         self.tokens.expect('RIGHT')
@@ -114,8 +91,16 @@ class Parser:
 
         return Transform.from_translation(x, y)
 
-    def parse_transform(self):
+    def parse_primative(self):
         match self.tokens.pop():
+            case ('NUMBER', value):
+                return float(value)
+
+            case ('LEFT', _):
+                expression = self.parse_expression()
+                self.tokens.expect('RIGHT')
+                return expression
+
             case ('ID', value):
                 match value:
                     case 'ref':  return self.parse_reference()
@@ -126,5 +111,32 @@ class Parser:
                     case 'inch': return self.parse_translation(25.4)
                     case 'mil':  return self.parse_translation(0.0254)
                     case 'mm':   return self.parse_translation(1)
-                    case _:      raise RuntimeError(f'Unexpected transformation "{value}"')
-            case (token, value): raise RuntimeError(f'Unexpected token "{value}" of type {token}')
+                    case _:      raise RuntimeError(f'Unexpected transformation "{value}"')                
+
+            case (token, value):
+                raise RuntimeError(f'Unexpected token "{value}" of type {token}')
+
+    def parse_factor(self):
+        match self.tokens.peek():
+            case ('+', value): self.tokens.pop(); return +self.parse_primative()
+            case ('-', value): self.tokens.pop(); return -self.parse_primative()
+            case _:            return self.parse_primative()
+
+    def parse_term(self):
+        factor = self.parse_factor()
+
+        while True:
+            match self.tokens.peek():
+                case ('OP', '*'): self.tokens.pop(); factor = factor * self.parse_factor()
+                case ('OP', '/'): self.tokens.pop(); factor = factor / self.parse_factor()
+                case ('OP', '@'): self.tokens.pop(); factor = factor @ self.parse_factor()
+                case _: return factor
+
+    def parse_expression(self):
+        term = self.parse_term()
+
+        while True:
+            match self.tokens.peek():
+                case ('OP', '+'): self.tokens.pop(); term = term + self.parse_term()
+                case ('OP', '-'): self.tokens.pop(); term = term - self.parse_term()
+                case _: return term

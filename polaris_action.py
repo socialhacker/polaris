@@ -19,14 +19,9 @@ def ignore_whitespace(tokens):
     return filter(lambda item : item[0] != "WHITESPACE", tokens)
 
 def compute_transform(source):
-    tokens    = Tokens(ignore_whitespace(tokenize(source)))
-    parser    = Parser(tokens)
-    transform = Transform(0, 0, 0)
+    tokens = Tokens(ignore_whitespace(tokenize(source)))
 
-    while tokens:
-        transform = transform * parser.parse_transform()
-
-    return transform
+    return Parser(tokens).parse_expression()
 
 def get_footprint_transform(footprint):
     x, y = footprint.GetPosition()
@@ -63,8 +58,7 @@ class PolarisAction(pcbnew.ActionPlugin):
                 _, origin = transforms.get(path, (footprint,
                                                   Transform(0, 0, 0)))
 
-                transforms[path] = (footprint, origin * transform)
-
+                transforms[path] = (footprint, transform @ origin)
 
         for uuid, (footprint, transform) in transforms.items():
             set_footprint_transform(footprint, transform)
