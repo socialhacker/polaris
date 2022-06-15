@@ -1,7 +1,7 @@
 import math
 import re
 
-from .transform import Transform
+from .source.transform import Transform
 
 #
 # Polaris syntax:

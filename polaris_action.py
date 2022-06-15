@@ -10,10 +10,10 @@ import re
 import sys
 import wx
 
-from .transform import Transform
-from .parser    import Tokens
-from .parser    import Parser
-from .parser    import tokenize
+from .source.transform import Transform
+from .parser import Tokens
+from .parser import Parser
+from .parser import tokenize
 
 def ignore_whitespace(tokens):
     return filter(lambda item : item[0] != "WHITESPACE", tokens)
