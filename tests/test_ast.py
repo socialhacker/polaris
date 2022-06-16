@@ -26,13 +26,18 @@ class TestAST(unittest.TestCase):
             ast.evaluate({}, ast.BinaryOp(ast.Constant(12), "/", ast.Constant(10))), 1.2)
 
     def test_variable(self):
-        self.assertEqual(ast.evaluate({"foo": 4}, ast.Variable("foo")), 4)
+        self.assertEqual(ast.evaluate({"foo": ast.Variable(4)}, ast.VariableRead("foo")), 4)
 
     def test_function(self):
+        f = ast.Function(lambda s, a: ast.evaluate(s, a))
+
+        self.assertEqual(ast.evaluate({"f": f}, ast.FunctionCall("f", [ast.Constant(7)])), 7)
+
         self.assertEqual(
-            ast.evaluate({"v": 1},
-                         ast.Function(lambda s, a: ast.evaluate(s, a),
-                                      [ast.BinaryOp(ast.Variable("v"), "+", ast.Constant(7))])),
+            ast.evaluate({"f": f,
+                          "v": ast.Variable(1)},
+                         ast.FunctionCall("f",
+                                          [ast.BinaryOp(ast.VariableRead("v"), "+", ast.Constant(7))])),
             8)
 
 if __name__ == '__main__':
