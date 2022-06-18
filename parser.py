@@ -1,6 +1,7 @@
 import math
 import re
 
+from .source.ast       import BinaryOp, Constant, FunctionCall, UnaryOp, VariableRead
 from .source.transform import Transform
 
 #
@@ -27,6 +28,7 @@ def tokenize(source):
                ('LEFT',       r'\('),
                ('RIGHT',      r'\)'),
                ('COMMA',      r','),
+               ('COLON',      r':'),
                ('WHITESPACE', r'\s+'),
                ('ERROR',      r'.') ]
 
@@ -69,32 +71,26 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
 
-    def parse_reference(self):
+    def parse_arguments(self):
         self.tokens.expect('LEFT')
+
+        args = []
+        while self.tokens.peek()[0] != 'RIGHT':
+            args.append(self.parse_expression())
+
+            if self.tokens.peek()[0] != 'COMMA':
+                break
+
+            self.tokens.pop()
+
         self.tokens.expect('RIGHT')
 
-        return Transform(0, 0, 0)
-
-    def parse_rotation(self, scale):
-        self.tokens.expect('LEFT')
-        angle = self.parse_expression() * scale
-        self.tokens.expect('RIGHT')
-
-        return Transform.from_rotation(angle)
-
-    def parse_translation(self, scale):
-        self.tokens.expect('LEFT')
-        x = self.parse_expression() * scale
-        self.tokens.expect('COMMA')
-        y = self.parse_expression() * scale
-        self.tokens.expect('RIGHT')
-
-        return Transform.from_translation(x, y)
+        return args
 
     def parse_primative(self):
         match self.tokens.pop():
             case ('NUMBER', value):
-                return float(value)
+                return Constant(float(value))
 
             case ('LEFT', _):
                 expression = self.parse_expression()
@@ -102,24 +98,17 @@ class Parser:
                 return expression
 
             case ('ID', value):
-                match value:
-                    case 'ref':  return self.parse_reference()
-                    case 'deg':  return self.parse_rotation(math.pi / 180)
-                    case 'grad': return self.parse_rotation(math.pi / 200)
-                    case 'rad':  return self.parse_rotation(1)
-                    case 'turn': return self.parse_rotation(math.pi * 2)
-                    case 'inch': return self.parse_translation(25.4)
-                    case 'mil':  return self.parse_translation(0.0254)
-                    case 'mm':   return self.parse_translation(1)
-                    case _:      raise RuntimeError(f'Unexpected transformation "{value}"')                
+                match self.tokens.peek():
+                    case ('LEFT', _): return FunctionCall(value, self.parse_arguments())
+                    case _:           return VariableRead(value)
 
             case (token, value):
                 raise RuntimeError(f'Unexpected token "{value}" of type {token}')
 
     def parse_factor(self):
         match self.tokens.peek():
-            case ('+', value): self.tokens.pop(); return +self.parse_primative()
-            case ('-', value): self.tokens.pop(); return -self.parse_primative()
+            case ('OP', '+'): self.tokens.pop(); return UnaryOp('+', self.parse_primative())
+            case ('OP', '-'): self.tokens.pop(); return UnaryOp('-', self.parse_primative())
             case _:            return self.parse_primative()
 
     def parse_term(self):
@@ -127,9 +116,9 @@ class Parser:
 
         while True:
             match self.tokens.peek():
-                case ('OP', '*'): self.tokens.pop(); factor = factor * self.parse_factor()
-                case ('OP', '/'): self.tokens.pop(); factor = factor / self.parse_factor()
-                case ('OP', '@'): self.tokens.pop(); factor = factor @ self.parse_factor()
+                case ('OP', '*'): self.tokens.pop(); factor = BinaryOp(factor, '*', self.parse_factor())
+                case ('OP', '/'): self.tokens.pop(); factor = BinaryOp(factor, '/', self.parse_factor())
+                case ('OP', '@'): self.tokens.pop(); factor = BinaryOp(factor, '@', self.parse_factor())
                 case _: return factor
 
     def parse_expression(self):
@@ -137,6 +126,23 @@ class Parser:
 
         while True:
             match self.tokens.peek():
-                case ('OP', '+'): self.tokens.pop(); term = term + self.parse_term()
-                case ('OP', '-'): self.tokens.pop(); term = term - self.parse_term()
+                case ('OP', '+'): self.tokens.pop(); term = BinaryOp(term, '+', self.parse_term())
+                case ('OP', '-'): self.tokens.pop(); term = BinaryOp(term, '-', self.parse_term())
                 case _: return term
+
+    def parse_script(self):
+        matchers = {}
+
+        if (self.tokens.pop() == ('ID', "script") and
+            self.tokens.pop() == ('LEFT', "(") and
+            self.tokens.pop() == ('ID', "polaris") and
+            self.tokens.pop() == ('RIGHT', ")")):
+
+            while self.tokens:
+                prefix = self.tokens.expect('ID')
+                self.tokens.expect('COLON')
+                expression = self.parse_expression()
+
+                matchers[prefix] = expression
+
+        return matchers
