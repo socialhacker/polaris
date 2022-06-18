@@ -10,7 +10,7 @@ import re
 import sys
 import wx
 
-from .source.ast import evaluate, Function
+from .source.ast import evaluate, Function, SymbolTable, Variable
 from .source.transform import Transform
 from .parser import Tokens
 from .parser import Parser
@@ -23,7 +23,7 @@ def translation(symbols, x, y, scale):
     return Transform.from_translation(evaluate(symbols, x) * scale,
                                       evaluate(symbols, y) * scale)
 
-symbols = {
+symbols = SymbolTable(None, {
     'deg':  Function(lambda s, a: rotation(s, a, math.pi / 180)),
     'grad': Function(lambda s, a: rotation(s, a, math.pi / 200)),
     'rad':  Function(lambda s, a: rotation(s, a, 1)),
@@ -31,7 +31,7 @@ symbols = {
     'inch': Function(lambda s, x, y: translation(s, x, y, 25.4)),
     'mil':  Function(lambda s, x, y: translation(s, x, y, 0.0254)),
     'mm':   Function(lambda s, x, y: translation(s, x, y, 1))
-}
+})
 
 def ignore_whitespace(tokens):
     return filter(lambda item : item[0] != "WHITESPACE", tokens)
@@ -88,12 +88,14 @@ class PolarisAction(pcbnew.ActionPlugin):
         for footprint in board.GetFootprints():
             path      = footprint.GetPath().AsString()
             reference = footprint.GetReference()
+            index     = int(re.search(r"(\d*)$", reference).group())
+            local     = SymbolTable(symbols, {'index': Variable(index)})
             transform = Transform(0, 0, 0)
 
             for prefix, expression in matchers.items():
                 if reference.startswith(prefix):
                     print(f'expression: {expression}', file=sys.stderr)
-                    transform = evaluate(symbols, expression) @ transform
+                    transform = evaluate(local, expression) @ transform
 
             if footprint.HasProperty('Polaris'):
                 source    = footprint.GetProperty('Polaris')

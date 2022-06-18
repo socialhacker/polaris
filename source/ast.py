@@ -10,6 +10,11 @@ class SymbolTable:
     scope: Optional[Any] # This should be Optional(SymbolTable)
     table: Dict[str, Statement]
 
+    def __getitem__(self, key):
+        if key in self.table: return self.table[key]
+        if self.scope: return self.scope[key]
+        return None
+
 @dataclass
 class Function(Statement):
     func: object
