@@ -58,6 +58,32 @@ def set_footprint_transform(footprint, transform):
                                          pcbnew.Millimeter2iu(transform.y)))
     footprint.SetOrientationDegrees(-math.degrees(transform.theta))
 
+def add_transform(transforms, footprint, transform):
+    path = footprint.GetPath().AsString()
+
+    if path in transforms:
+        (_, origin) = transforms[path]
+        transforms[path] = (footprint, transform @ origin)
+    else:
+        transforms[path] = (footprint, transform)
+
+def show_dialog(title, message):
+    dialog = wx.MessageDialog(None, message, title, wx.OK)
+    dialog.ShowModal()
+    dialog.Destroy()
+
+def find_duplicates(matchers):
+    unique     = set()
+    duplicates = []
+
+    for matcher in matchers:
+        if matcher.prefix in unique:
+            duplicates.append(matcher.prefix)
+        else:
+            unique.add(matcher.prefix)
+
+    return duplicates
+
 class PolarisAction(pcbnew.ActionPlugin):
     def defaults(self):
         self.name = "Polaris"
@@ -66,9 +92,9 @@ class PolarisAction(pcbnew.ActionPlugin):
         self.show_toolbar_button = True
 
     def Run(self):
-        board = pcbnew.GetBoard()
+        board      = pcbnew.GetBoard()
         transforms = {}
-        matchers   = {}
+        matchers   = []
 
         #
         # Parse all of the polaris scripts found in TEXT drawings.  These will
@@ -77,7 +103,26 @@ class PolarisAction(pcbnew.ActionPlugin):
         #
         for drawing in board.GetDrawings():
             if isinstance (drawing, pcbnew.PCB_TEXT):
-                matchers.update(read_script(drawing.GetText()))
+                matchers.extend(read_script(drawing.GetText()))
+
+        #
+        # Check for duplicate reference prefix matchers.  We can't handle
+        # duplicates because we don't know what order to apply the transforms
+        # in.
+        #
+        duplicates = find_duplicates(matchers)
+
+        if (duplicates):
+            show_dialog("Error",
+                        f'Duplicate reference matchers found: {duplicates}')
+            return
+
+        #
+        # Sort the matchers by prefix length.  This ensures that the more
+        # general prefix matches and applies before the more specific prefix
+        # matches.
+        #
+        matchers.sort(key=lambda m : len(m.prefix))
 
         #
         # For every footprint on the board check to see if one of the script
@@ -86,22 +131,19 @@ class PolarisAction(pcbnew.ActionPlugin):
         # and then individual footprint Polaris property transforms happending.
         #
         for footprint in board.GetFootprints():
-            path      = footprint.GetPath().AsString()
             reference = footprint.GetReference()
             index     = int(re.search(r"(\d*)$", reference).group())
             local     = SymbolTable(symbols, {'index': Variable(index)})
-            transform = Transform(0, 0, 0)
 
-            for prefix, expression in matchers.items():
-                if reference.startswith(prefix):
-                    print(f'expression: {expression}', file=sys.stderr)
-                    transform = evaluate(local, expression) @ transform
+            for matcher in matchers:
+                if reference.startswith(matcher.prefix):
+                    add_transform(transforms,
+                                  footprint,
+                                  evaluate(local, matcher.expression))
 
             if footprint.HasProperty('Polaris'):
-                source    = footprint.GetProperty('Polaris')
-                transform = read_transform(source) @ transform
-
-            transforms[path] = (footprint, transform)
+                source = footprint.GetProperty('Polaris')
+                add_transform(transforms, footprint, read_transform(source))
 
         #
         # Finally, apply all of the transforms that we found.

@@ -1,6 +1,8 @@
 import math
 import re
 
+from dataclasses import dataclass
+
 from .source.ast       import BinaryOp, Constant, FunctionCall, UnaryOp, VariableRead
 from .source.transform import Transform
 
@@ -67,6 +69,11 @@ class Tokens:
 
         return value
 
+@dataclass
+class Matcher:
+    prefix: str
+    expression: object
+
 class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
@@ -131,7 +138,7 @@ class Parser:
                 case _: return term
 
     def parse_script(self):
-        matchers = {}
+        matchers = []
 
         if (self.tokens.pop() == ('ID', "script") and
             self.tokens.pop() == ('LEFT', "(") and
@@ -143,6 +150,6 @@ class Parser:
                 self.tokens.expect('COLON')
                 expression = self.parse_expression()
 
-                matchers[prefix] = expression
+                matchers.append(Matcher(prefix, expression))
 
         return matchers
